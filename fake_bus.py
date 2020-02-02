@@ -1,35 +1,39 @@
 import json
 from itertools import cycle, chain
 import logging
+import os
 import sys
 
 import trio
 from trio_websocket import open_websocket_url
 
 
-async def load_bus_route(filename):
-    async with await trio.open_file(filename) as fp:
-        return await fp.read()
+def load_routes(directory_path='routes'):
+    for filename in os.listdir(directory_path):
+        if filename.endswith(".json"):
+            filepath = os.path.join(directory_path, filename)
+            with open(filepath, 'r', encoding='utf8') as file:
+                yield json.load(file)
 
 
-async def send_coordinates():
-    bus_route = json.loads(await load_bus_route('routes/156.json'))
-    coordinates = bus_route['coordinates']
+async def run_bus(url, bus_id, route):
+    coordinates = route['coordinates']
     route_cycle = cycle(chain(coordinates, coordinates[::-1]))
 
     try:
-        async with open_websocket_url('ws://127.0.0.1:9000') as ws:
+        async with open_websocket_url(url) as ws:
             while True:
                 bus_coords = next(route_cycle)
                 lat, lng = bus_coords[0], bus_coords[1]
                 coordinates = {
-                    "busId": "1234567890",
-                    "lat": lat,
-                    "lng": lng,
-                    "route": bus_route["name"]
+                    'busId': f'{route["name"]}-0',
+                    'lat': lat,
+                    'lng': lng,
+                    'route': route['name']
                 }
 
-                await ws.send_message(json.dumps(coordinates))
+                message = json.dumps(coordinates, ensure_ascii=True)
+                await ws.send_message(message)
                 logging.debug(f'Sent message: {coordinates}')
 
                 await trio.sleep(1)
@@ -42,11 +46,16 @@ async def main():
     logging.getLogger('trio-websocket').setLevel(logging.WARNING)
     logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
-    await send_coordinates()
+    url = 'ws://127.0.0.1:9000'
+
+    async with trio.open_nursery() as nursery:
+        for route in load_routes():
+            bus_id = route['name']
+            nursery.start_soon(run_bus,url, bus_id, route)
 
 
 if __name__ == '__main__':
     try:
         trio.run(main)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, trio.MultiError):
         sys.exit()

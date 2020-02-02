@@ -11,7 +11,8 @@ async def run_ws_server(request):
 
     while True:
         try:
-            message = await ws.get_message()
+            received_message = await ws.get_message()
+            message = json.loads(received_message)
             logging.debug(f'Received message: {message}')
         except ConnectionClosed:
             break
