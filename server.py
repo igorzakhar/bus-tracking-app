@@ -42,7 +42,7 @@ async def talk_to_browser(request, receive_channel):
             await ws.send_message(json.dumps(browser_msg, ensure_ascii=True))
             logging.debug(f'Talk to browser: {browser_msg["buses"]}')
 
-            await trio.sleep(0.01)
+            await trio.sleep(0.001)
 
         except ConnectionClosed:
             break
